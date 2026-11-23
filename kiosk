@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=320, initial-scale=1">
+<title>Timekeeping Terminal</title>
+<style>
+  :root{
+    --bg:#0b1214; --panel:#111a1d; --panel2:#152024; --line:#22322f; --line2:#2b3d3a;
+    --text:#e8f1ef; --muted:#8fa3a0; --dim:#5f7370;
+    --teal:#2dd4bf; --teal2:#14b8a6; --tealbg:#0f2a27;
+    --amber:#f5a524; --amberbg:#2a1d0c; --green:#34d399; --red:#f87171;
+    --slate:#2a3346;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  [hidden]{display:none!important}
+  html,body{width:320px;height:489px;background:var(--bg);overflow:hidden}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;color:var(--text);-webkit-font-smoothing:antialiased}
+  button,input,select{font:inherit;color:inherit}
+  button{cursor:pointer;border:0;background:none}
+  svg{display:block}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+
+  #app{position:relative;width:320px;height:489px;display:flex;flex-direction:column;background:var(--bg)}
+
+  /* Header */
+  .hdr{display:flex;align-items:center;gap:8px;padding:9px 10px;margin:6px 6px 0;background:var(--panel);border:1px solid var(--line);border-radius:10px}
+  .ico{width:30px;height:30px;border-radius:8px;background:var(--tealbg);color:var(--teal);display:grid;place-items:center;flex:none}
+  .hdr-t{flex:1;min-width:0}
+  .hdr-t b{display:block;font-size:12px;font-weight:600}
+  .hdr-t span{display:block;font-size:9.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hdr-t span em{font-style:normal;color:var(--text);font-weight:600}
+  .clk{text-align:right;flex:none}
+  .clk .t{font-size:15px;font-weight:700;color:var(--teal);letter-spacing:.5px}
+  .clk .d{font-size:8.5px;color:var(--muted);margin-top:1px}
+
+  /* Home */
+  .main{flex:1;display:flex;flex-direction:column;margin:6px;padding:10px;background:var(--panel);border:1px solid var(--line);border-radius:12px;min-height:0}
+  .intro{text-align:center;margin-bottom:10px}
+  .intro .ico{margin:0 auto 6px;width:28px;height:28px}
+  .intro h1{font-size:14.5px;font-weight:700}
+  .intro p{font-size:9.5px;color:var(--muted);margin-top:3px;line-height:1.35}
+  .big{display:grid;grid-template-columns:1fr 1fr;gap:7px;flex:1;min-height:0}
+  .card{position:relative;text-align:left;border-radius:11px;padding:10px;display:flex;flex-direction:column;border:1px solid var(--line2);transition:transform .12s,filter .12s}
+  .card:hover{filter:brightness(1.1)}
+  .card:active{transform:scale(.97)}
+  .card:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+  .card.in{background:linear-gradient(145deg,#1d9e8b,#0f5f56);border-color:#2fb9a4}
+  .card.out{background:linear-gradient(145deg,#2c3548,#171c2e);border-color:#3a4560}
+  .card .ci{width:32px;height:32px;border-radius:8px;background:rgba(255,255,255,.16);display:grid;place-items:center;margin-bottom:8px}
+  .card h2{font-size:14px;font-weight:700;display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+  .tag{font-size:8px;font-weight:600;padding:2px 6px;border-radius:99px;background:rgba(255,255,255,.18);white-space:nowrap}
+  .card p{font-size:9.5px;line-height:1.35;color:rgba(255,255,255,.82);margin-top:4px;flex:1}
+  .card .go{font-size:9.5px;margin-top:6px;display:flex;align-items:center;gap:3px;opacity:.9}
+  .small{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:7px}
+  .sc{position:relative;text-align:left;border-radius:10px;padding:8px;background:#101b1a;border:1px solid #1f3b34;display:flex;flex-direction:column;min-height:112px;transition:filter .12s,transform .12s}
+  .sc:hover{filter:brightness(1.15)}
+  .sc:active{transform:scale(.97)}
+  .sc:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+  .sc.brk{background:#1a1510;border-color:#5a3a14}
+  .sc .si{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;background:#173a33;color:var(--green)}
+  .sc.brk .si{background:#4a3010;color:var(--amber)}
+  .sc.xfr .si{color:var(--teal)}
+  .sc .pill{position:absolute;top:7px;right:6px;font-size:7.5px;padding:1px 5px;border-radius:99px;border:1px solid var(--green);color:var(--green)}
+  .sc.brk .pill{border-color:var(--amber);color:var(--amber)}
+  .sc.xfr .pill{border-color:var(--teal);color:var(--teal)}
+  .sc h3{font-size:10.5px;font-weight:600;margin-top:8px;line-height:1.2}
+  .sc p{font-size:8.5px;color:var(--muted);margin-top:3px;line-height:1.3;flex:1}
+  .sc .go{font-size:8.5px;color:var(--green);margin-top:5px;font-weight:600}
+  .sc.brk .go{color:var(--amber)}
+  .sc.xfr .go{color:var(--teal)}
+
+  .ftr{display:flex;justify-content:space-between;align-items:center;padding:0 12px 8px;font-size:8.5px;color:var(--muted)}
+  .live{display:flex;align-items:center;gap:4px}
+  .live i{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green)}
+
+  /* Modal */
+  .modal{position:absolute;inset:0;background:var(--panel);display:flex;flex-direction:column;z-index:5}
+  .modal[hidden]{display:none}
+  .m-hd{display:flex;gap:8px;align-items:flex-start;padding:11px 10px 8px;border-bottom:1px solid var(--line)}
+  .m-hd .ico{width:28px;height:28px}
+  .m-hd b{display:block;font-size:13.5px}
+  .m-hd span{display:block;font-size:9px;color:var(--muted);margin-top:1px}
+  .x{margin-left:auto;color:var(--muted);padding:2px;border-radius:6px}
+  .x:hover{color:var(--text)}
+  .m-bd{flex:1;overflow-y:auto;padding:9px 10px 4px;scrollbar-width:thin;scrollbar-color:var(--line2) transparent}
+  .lbl{display:flex;align-items:center;gap:5px;font-size:10px;font-weight:600;margin:0 0 5px}
+  .lbl svg{color:var(--teal)}
+  .lbl .chg{margin-left:auto;font-size:9px;color:var(--teal);font-weight:500;display:flex;gap:3px;align-items:center}
+  .row{display:flex;gap:6px}
+  .inp{width:100%;background:#0a1113;border:1px solid var(--line2);border-radius:8px;padding:8px 9px;font-size:11.5px;outline:none}
+  .inp:focus{border-color:var(--teal);box-shadow:0 0 0 2px rgba(45,212,191,.25)}
+  .inp::placeholder{color:var(--dim)}
+  .inp:disabled{opacity:.5}
+  .btn{border-radius:8px;padding:8px 11px;font-size:11px;font-weight:600;white-space:nowrap}
+  .btn.p{background:var(--teal);color:#062b26}
+  .btn.p:disabled{background:#1b4f48;color:#6fa49c;cursor:not-allowed}
+  .btn.g{background:var(--panel2);border:1px solid var(--line2)}
+  .btn.g:disabled{opacity:.45;cursor:not-allowed}
+  .hint{font-size:8.5px;color:var(--dim);margin-top:4px}
+  .msg{font-size:9.5px;margin-top:5px;line-height:1.35;min-height:0}
+  .msg.err{color:var(--red)} .msg.ok{color:var(--green)}
+  .msg:empty{display:none}
+  .assoc{display:flex;align-items:center;gap:8px;padding:8px;border:1px solid #1f4a42;background:#0f1d1c;border-radius:9px}
+  .av{width:30px;height:30px;border-radius:8px;background:var(--teal2);display:grid;place-items:center;font-weight:700;font-size:13px;color:#062b26;flex:none}
+  .assoc .nm{font-size:11.5px;font-weight:700;display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+  .assoc .id{font-size:8px;font-weight:600;color:var(--teal);border:1px solid var(--teal);border-radius:99px;padding:0 5px}
+  .assoc .rl{font-size:8.5px;color:var(--muted);margin-top:2px}
+  .assoc .ver{margin-left:auto;font-size:8px;font-weight:600;background:#14532d;color:#86efac;border-radius:99px;padding:2px 6px;display:flex;gap:3px;align-items:center;flex:none}
+  .box{border:1px solid var(--line2);border-radius:9px;padding:8px;margin-top:9px;background:#0e1618}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .f label{display:block;font-size:8.5px;color:var(--muted);margin-bottom:3px}
+  select.inp{padding:7px 6px;font-size:10px;appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 10px) 50%,calc(100% - 6px) 50%;background-size:4px 4px;background-repeat:no-repeat;padding-right:16px;text-overflow:ellipsis}
+  .sec{margin-top:10px}
+  .vf{position:relative;height:148px;border:1.5px dashed #24534b;border-radius:10px;background:#060b0d;overflow:hidden;display:grid;place-items:center;text-align:center}
+  .vf video,.vf img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .vf video{transform:scaleX(-1)}
+  .vf .ph{position:relative;padding:0 14px}
+  .vf .ph .cam{width:38px;height:38px;border-radius:50%;background:var(--tealbg);color:var(--teal);display:grid;place-items:center;margin:0 auto 6px}
+  .vf .ph b{font-size:11px;display:block}
+  .vf .ph span{font-size:9px;color:var(--muted);display:block;margin-top:2px}
+  .vf .badge{position:absolute;left:6px;top:6px;font-size:8px;background:rgba(0,0,0,.6);border-radius:99px;padding:2px 6px;color:var(--green);display:flex;align-items:center;gap:3px}
+  .cap{display:flex;justify-content:center;margin-top:6px}
+  .cap .btn{display:flex;align-items:center;gap:5px;font-size:10px;padding:6px 10px}
+  .m-ft{display:flex;gap:6px;padding:8px 10px 10px;border-top:1px solid var(--line)}
+  .m-ft .p{flex:1;display:flex;align-items:center;justify-content:center;gap:5px}
+
+  /* Success */
+  .done{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;text-align:center}
+  .done .ok{width:46px;height:46px;border-radius:50%;background:#14532d;color:#86efac;display:grid;place-items:center;margin-bottom:8px}
+  .done h2{font-size:15px}
+  .done .sub{font-size:10px;color:var(--muted);margin-top:3px}
+  .sum{width:100%;margin-top:12px;border:1px solid var(--line2);border-radius:10px;padding:9px;display:flex;gap:9px;text-align:left;background:#0e1618}
+  .sum img{width:58px;height:58px;border-radius:8px;object-fit:cover;flex:none;background:#000}
+  .sum dl{font-size:9.5px;display:grid;grid-template-columns:auto 1fr;gap:2px 6px;align-content:center;min-width:0}
+  .sum dt{color:var(--muted)}
+  .sum dd{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .done .back{font-size:9px;color:var(--dim);margin-top:10px}
+  .done .btn{margin-top:8px;padding:7px 22px}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="hdr">
+    <div class="ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+    <div class="hdr-t">
+      <b>In-Store Timekeeping</b>
+      <span>Kiosk: <em>NB Care Store – Portland Pearl District</em></span>
+    </div>
+    <div class="clk"><div class="t mono" id="time">--:--:--</div><div class="d" id="date"></div></div>
+  </header>
+
+  <main class="main" id="home">
+    <div class="intro">
+      <div class="ico"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+      <h1>Select Your Terminal Action</h1>
+      <p>Choose an option to begin. You'll enter your PIN<br>and capture a photo to authenticate.</p>
+    </div>
+    <div class="big">
+      <button class="card in" data-action="in">
+        <div class="ci"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3"/><path d="M10 17l5-5-5-5"/><path d="M15 12H4"/></svg></div>
+        <h2>Clock In <span class="tag">Start</span></h2>
+        <p>Start your shift with PIN &amp; photo authentication</p>
+        <span class="go">Tap to begin ›</span>
+      </button>
+      <button class="card out" data-action="out">
+        <div class="ci"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg></div>
+        <h2>Clock Out <span class="tag">End</span></h2>
+        <p>End your shift, verify photo &amp; sync timecard</p>
+        <span class="go">Tap to begin ›</span>
+      </button>
+    </div>
+    <div class="small">
+      <button class="sc brk" data-action="breakStart">
+        <span class="pill">30 Min</span>
+        <div class="si"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9h13v6a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z"/><path d="M17 11h1.5a2.5 2.5 0 0 1 0 5H17"/><path d="M8 3v3M12 3v3"/></svg></div>
+        <h3>Start Meal Break</h3><p>Begin your scheduled break</p><span class="go">Start ›</span>
+      </button>
+      <button class="sc" data-action="breakEnd">
+        <span class="pill">Resume</span>
+        <div class="si"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 3v3M17.5 4.5h3"/></svg></div>
+        <h3>End Meal Break</h3><p>Resume your work shift</p><span class="go">Resume ›</span>
+      </button>
+      <button class="sc xfr" data-action="transfer">
+        <span class="pill">Mid-Shift</span>
+        <div class="si"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4-4 4"/><path d="M21 7H8"/><path d="M7 21l-4-4 4-4"/><path d="M3 17h13"/></svg></div>
+        <h3>Location Transfer</h3><p>Transfer store or job role</p><span class="go">Transfer ›</span>
+      </button>
+    </div>
+  </main>
+
+  <footer class="ftr">
+    <span class="live"><i></i>UKG Live · auto-reverts for privacy</span>
+    <span class="mono" id="enrolled"></span>
+  </footer>
+
+  <!-- Action modal -->
+  <section class="modal" id="modal" hidden role="dialog" aria-modal="true" aria-labelledby="mTitle">
+    <div class="m-hd">
+      <div class="ico" id="mIcon"></div>
+      <div><b id="mTitle"></b><span>Verify your PIN, capture a photo, and submit</span></div>
+      <button class="x" id="mClose" aria-label="Close"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+
+    <div class="m-bd" id="mBody">
+      <div class="lbl"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3"/></svg>Step 1: Enter Employee PIN or ID
+        <button class="chg" id="chgAssoc" hidden><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M20 11a8 8 0 0 0-14.9-3M4 13a8 8 0 0 0 14.9 3"/><path d="M4 4v4h4M20 20v-4h-4"/></svg>Change</button>
+      </div>
+      <div id="pinStep">
+        <form class="row" id="pinForm" autocomplete="off" novalidate>
+          <input class="inp mono" id="pin" type="password" inputmode="numeric" maxlength="8" placeholder="4-digit PIN or NB-ID" aria-label="Employee PIN or ID" autocomplete="off" spellcheck="false">
+          <button class="btn p" id="verifyBtn" type="submit">Verify PIN</button>
+        </form>
+        <div class="hint">Demo PINs: 1042 · 2087 · 3310</div>
+      </div>
+      <div class="assoc" id="assocCard" hidden>
+        <div class="av" id="aAv"></div>
+        <div style="min-width:0">
+          <div class="nm"><span id="aName"></span><span class="id" id="aId"></span></div>
+          <div class="rl"><span id="aRole"></span> · Current: <b id="aStatus" style="color:var(--text)"></b></div>
+        </div>
+        <span class="ver"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M5 12l5 5L20 7"/></svg>Verified</span>
+      </div>
+      <div class="msg" id="pinMsg" aria-live="polite"></div>
+
+      <div class="box" id="xferBox" hidden>
+        <div class="lbl" style="margin-bottom:7px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 3l4 4-4 4M21 7H8M7 21l-4-4 4-4M3 17h13"/></svg>Transfer Store &amp; Role</div>
+        <div class="grid2">
+          <div class="f"><label for="xStore">Target Retail Store</label><select class="inp" id="xStore"></select></div>
+          <div class="f"><label for="xRole">Shift Role</label><select class="inp" id="xRole"></select></div>
+        </div>
+        <div class="f" style="margin-top:6px"><label for="xReason">Transfer Reason</label><input class="inp" id="xReason" maxlength="80" value="Store coverage support"></div>
+      </div>
+
+      <div class="sec">
+        <div class="lbl"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Step 2: Webcam Photo Authentication</div>
+        <div class="vf" id="vf">
+          <video id="video" playsinline muted hidden></video>
+          <img id="shot" alt="Captured authentication photo" hidden>
+          <span class="badge" id="liveBadge" hidden>● Live</span>
+          <div class="ph" id="ph">
+            <div class="cam"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></div>
+            <b id="phT">Camera Viewfinder Ready</b><span id="phS">Please enter your PIN above first</span>
+          </div>
+        </div>
+        <div class="cap"><button class="btn g" id="capBtn" disabled><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span id="capTxt">Capture Webcam Photo</span></button></div>
+      </div>
+
+      <div class="f sec"><label for="note">Authentication Note</label><input class="inp" id="note" maxlength="120" value="Photo authentication verified at terminal kiosk"></div>
+      <div class="msg" id="formMsg" aria-live="polite"></div>
+    </div>
+
+    <div class="m-ft">
+      <button class="btn g" id="cancelBtn">Cancel</button>
+      <button class="btn p" id="confirmBtn" disabled><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg><span id="confirmTxt"></span></button>
+    </div>
+  </section>
+
+  <!-- Success -->
+  <section class="modal" id="done" hidden role="status">
+    <div class="done">
+      <div class="ok"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 12l5 5L20 7"/></svg></div>
+      <h2 id="dTitle"></h2>
+      <div class="sub" id="dSub"></div>
+      <div class="sum">
+        <img id="dPhoto" alt="Authentication photo">
+        <dl id="dList"></dl>
+      </div>
+      <button class="btn p" id="doneBtn">Done</button>
+      <div class="back" id="dBack"></div>
+    </div>
+  </section>
+</div>
+
+<canvas id="canvas" width="320" height="240" hidden></canvas>
+
+<script>
+(function () {
+  "use strict";
+  // Demo only: all data lives in memory. Nothing is sent over the network or written to storage,
+  // and captured photos are discarded whenever the terminal reverts to the home screen.
+
+  var KIOSK = "NB Care Store – Portland Pearl District";
+  var STORES = [KIOSK, "NB Retail Hub – Albuquerque", "NB Care Store – Seattle Capitol Hill", "NB Outlet – Boise Downtown"];
+  var ROLES = ["ACME Corp Flex Card Auditor", "Store Associate", "Pharmacy Technician", "Inventory Lead"];
+  var STATUS = { in: "Clocked In", out: "Clocked Out", brk: "On Meal Break" };
+
+  var ASSOCIATES = [
+    { pin: "1042", id: "NB-10944", name: "Carlos Rodriguez", role: "ACME Corp Flex Card Auditor", status: "in" },
+    { pin: "2087", id: "NB-11207", name: "Priya Shah", role: "Pharmacy Technician", status: "out" },
+    { pin: "3310", id: "NB-10388", name: "Marcus Lee", role: "Store Associate", status: "brk" }
+  ];
+
+  var ICONS = {
+    in: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3"/><path d="M10 17l5-5-5-5"/><path d="M15 12H4"/></svg>',
+    out: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>',
+    breakStart: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9h13v6a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z"/><path d="M17 11h1.5a2.5 2.5 0 0 1 0 5H17"/></svg>',
+    breakEnd: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg>',
+    transfer: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4-4 4M21 7H8M7 21l-4-4 4-4M3 17h13"/></svg>'
+  };
+
+  var ACTIONS = {
+    in:         { title: "Clock In", confirm: "Confirm & Clock In", from: ["out"], to: "in", done: "Clocked In", hint: "Already clocked in — use Clock Out or a meal break." },
+    out:        { title: "Clock Out", confirm: "Confirm & Clock Out", from: ["in"], to: "out", done: "Clocked Out", hint: null },
+    breakStart: { title: "Start Meal Break", confirm: "Confirm & Start Break", from: ["in"], to: "brk", done: "Meal Break Started", hint: null },
+    breakEnd:   { title: "End Meal Break", confirm: "Confirm & Resume Shift", from: ["brk"], to: "in", done: "Shift Resumed", hint: null },
+    transfer:   { title: "Shift Location Transfer", confirm: "Confirm Transfer", from: ["in"], to: "in", done: "Transfer Complete", hint: null }
+  };
+
+  var MAX_ATTEMPTS = 3, LOCK_MS = 30000, IDLE_MS = 60000, RETURN_S = 8;
+
+  var $ = function (id) { return document.getElementById(id); };
+  var state = { action: null, assoc: null, photo: null, stream: null, attempts: 0, lockedUntil: 0 };
+  var idleTimer = null, lockTimer = null, returnTimer = null;
+
+  // ---------- Clock ----------
+  function tick() {
+    var now = new Date();
+    $("time").textContent = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true });
+    $("date").textContent = now.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+  }
+  tick(); setInterval(tick, 1000);
+  $("enrolled").textContent = ASSOCIATES.length + " demo associates";
+
+  // ---------- Selects ----------
+  function fillSelect(sel, items) {
+    sel.textContent = "";
+    items.forEach(function (v) { var o = document.createElement("option"); o.value = v; o.textContent = v; sel.appendChild(o); });
+  }
+  fillSelect($("xStore"), STORES.slice(1));
+  fillSelect($("xRole"), ROLES);
+
+  // ---------- Modal lifecycle ----------
+  document.querySelectorAll("[data-action]").forEach(function (b) {
+    b.addEventListener("click", function () { openAction(b.getAttribute("data-action")); });
+  });
+
+  function openAction(key) {
+    if (!ACTIONS.hasOwnProperty(key)) return;
+    resetForm();
+    state.action = key;
+    var a = ACTIONS[key];
+    $("mTitle").textContent = a.title;
+    $("mIcon").innerHTML = ICONS[key]; // static, trusted markup defined above
+    $("confirmTxt").textContent = a.confirm;
+    $("xferBox").hidden = true;
+    $("modal").hidden = false;
+    $("mBody").scrollTop = 0;
+    applyLock();
+    setTimeout(function () { $("pin").focus(); }, 50);
+    bumpIdle();
+  }
+
+  function closeAll() {
+    stopCamera();
+    resetForm();
+    state.action = null;
+    $("modal").hidden = true;
+    $("done").hidden = true;
+    $("dPhoto").removeAttribute("src");
+    clearTimeout(idleTimer); clearInterval(returnTimer);
+  }
+
+  function resetForm() {
+    stopCamera();
+    state.assoc = null;
+    state.photo = null;
+    $("pin").value = "";
+    $("pinStep").hidden = false;
+    $("assocCard").hidden = true;
+    $("chgAssoc").hidden = true;
+    $("xferBox").hidden = true;
+    $("xReason").value = "Store coverage support";
+    $("note").value = "Photo authentication verified at terminal kiosk";
+    setMsg("pinMsg", "", "");
+    setMsg("formMsg", "", "");
+    $("shot").hidden = true; $("shot").removeAttribute("src");
+    $("video").hidden = true; $("liveBadge").hidden = true;
+    $("ph").hidden = false;
+    $("phT").textContent = "Camera Viewfinder Ready";
+    $("phS").textContent = "Please enter your PIN above first";
+    $("capBtn").disabled = true;
+    $("capTxt").textContent = "Capture Webcam Photo";
+    updateConfirm();
+  }
+
+  $("mClose").addEventListener("click", closeAll);
+  $("cancelBtn").addEventListener("click", closeAll);
+  $("doneBtn").addEventListener("click", closeAll);
+  $("chgAssoc").addEventListener("click", function () { resetForm(); applyLock(); $("pin").focus(); });
+
+  // Privacy: revert to the home screen after inactivity.
+  function bumpIdle() {
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(function () { if (!$("modal").hidden) closeAll(); }, IDLE_MS);
+  }
+  ["pointerdown", "keydown", "input"].forEach(function (ev) { $("modal").addEventListener(ev, bumpIdle); });
+
+  function setMsg(id, text, kind) { var el = $(id); el.textContent = text; el.className = "msg" + (kind ? " " + kind : ""); }
+
+  // ---------- PIN verification ----------
+  $("pin").addEventListener("input", function (e) {
+    // Allow digits, or an NB- style ID; strip anything else.
+    var v = e.target.value.toUpperCase().replace(/[^0-9NB-]/g, "");
+    e.target.value = v.slice(0, 8);
+  });
+
+  function applyLock() {
+    var remaining = state.lockedUntil - Date.now();
+    var locked = remaining > 0;
+    $("pin").disabled = locked; $("verifyBtn").disabled = locked;
+    clearInterval(lockTimer);
+    if (locked) {
+      var upd = function () {
+        var s = Math.ceil((state.lockedUntil - Date.now()) / 1000);
+        if (s <= 0) { clearInterval(lockTimer); state.attempts = 0; $("pin").disabled = false; $("verifyBtn").disabled = false; setMsg("pinMsg", "You can try again now.", ""); return; }
+        setMsg("pinMsg", "Too many attempts. Try again in " + s + "s or see a manager.", "err");
+      };
+      upd(); lockTimer = setInterval(upd, 1000);
+    }
+  }
+
+  $("pinForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    if (Date.now() < state.lockedUntil) return;
+    var raw = $("pin").value.trim().toUpperCase();
+    var valid = /^\d{4,6}$/.test(raw) || /^NB-\d{5}$/.test(raw);
+    if (!valid) { setMsg("pinMsg", "Enter a 4–6 digit PIN or an ID like NB-10944.", "err"); return; }
+
+    var found = null;
+    for (var i = 0; i < ASSOCIATES.length; i++) {
+      if (ASSOCIATES[i].pin === raw || ASSOCIATES[i].id === raw) { found = ASSOCIATES[i]; break; }
+    }
+    $("pin").value = "";
+    if (!found) {
+      state.attempts++;
+      if (state.attempts >= MAX_ATTEMPTS) { state.lockedUntil = Date.now() + LOCK_MS; applyLock(); }
+      else setMsg("pinMsg", "PIN or ID not recognized. " + (MAX_ATTEMPTS - state.attempts) + " attempt(s) left.", "err");
+      return;
+    }
+    state.attempts = 0;
+
+    var a = ACTIONS[state.action];
+    if (a.from.indexOf(found.status) === -1) {
+      setMsg("pinMsg", found.name.split(" ")[0] + " is currently " + STATUS[found.status] + ". " + suggestFor(found.status), "err");
+      return;
+    }
+    showAssoc(found);
+  });
+
+  function suggestFor(status) {
+    if (status === "out") return "Please Clock In first.";
+    if (status === "brk") return "Please End Meal Break first.";
+    return "Use Clock Out, a meal break, or Transfer.";
+  }
+
+  function showAssoc(p) {
+    state.assoc = p;
+    $("pinStep").hidden = true;
+    $("assocCard").hidden = false;
+    $("chgAssoc").hidden = false;
+    $("aAv").textContent = p.name.charAt(0);
+    $("aName").textContent = p.name;
+    $("aId").textContent = "ID: " + p.id;
+    $("aRole").textContent = p.role;
+    $("aStatus").textContent = STATUS[p.status];
+    setMsg("pinMsg", "", "");
+    if (state.action === "transfer") {
+      $("xferBox").hidden = false;
+      $("xRole").value = p.role;
+    }
+    $("phS").textContent = "Starting camera…";
+    startCamera();
+    updateConfirm();
+  }
+
+  // ---------- Camera ----------
+  function startCamera() {
+    $("capBtn").disabled = true;
+    var md = navigator.mediaDevices;
+    if (!md || !md.getUserMedia) { cameraFallback(); return; }
+    md.getUserMedia({ video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } }, audio: false })
+      .then(function (stream) {
+        if (!state.assoc) { stream.getTracks().forEach(function (t) { t.stop(); }); return; }
+        state.stream = stream;
+        var v = $("video");
+        v.srcObject = stream;
+        v.hidden = false; $("ph").hidden = true; $("liveBadge").hidden = false;
+        v.play().catch(function () {});
+        $("capBtn").disabled = false;
+        $("capTxt").textContent = "Capture Webcam Photo";
+      })
+      .catch(cameraFallback);
+  }
+
+  function cameraFallback() {
+    if (!state.assoc) return;
+    $("ph").hidden = false;
+    $("phT").textContent = "Camera not available";
+    $("phS").textContent = "Demo mode: a placeholder photo will be captured";
+    $("capBtn").disabled = false;
+    $("capTxt").textContent = "Capture Demo Photo";
+  }
+
+  function stopCamera() {
+    if (state.stream) { state.stream.getTracks().forEach(function (t) { t.stop(); }); state.stream = null; }
+    var v = $("video"); v.srcObject = null;
+  }
+
+  $("capBtn").addEventListener("click", function () {
+    if (!state.assoc) return;
+    if (state.photo) { // Retake
+      state.photo = null;
+      $("shot").hidden = true; $("shot").removeAttribute("src");
+      startCamera(); updateConfirm(); return;
+    }
+    var c = $("canvas"), ctx = c.getContext("2d"), v = $("video");
+    if (state.stream && v.videoWidth) {
+      var w = v.videoWidth, h = v.videoHeight, tw = c.width, th = c.height;
+      var scale = Math.max(tw / w, th / h), sw = tw / scale, sh = th / scale;
+      ctx.save(); ctx.translate(tw, 0); ctx.scale(-1, 1);
+      ctx.drawImage(v, (w - sw) / 2, (h - sh) / 2, sw, sh, 0, 0, tw, th);
+      ctx.restore();
+    } else {
+      drawPlaceholder(ctx, c.width, c.height, state.assoc.name);
+    }
+    stamp(ctx, c.width, c.height);
+    state.photo = c.toDataURL("image/jpeg", 0.82);
+    ctx.clearRect(0, 0, c.width, c.height);
+    stopCamera();
+    $("video").hidden = true; $("liveBadge").hidden = true; $("ph").hidden = true;
+    $("shot").src = state.photo; $("shot").hidden = false;
+    $("capTxt").textContent = "Retake Photo";
+    updateConfirm();
+  });
+
+  function drawPlaceholder(ctx, w, h, name) {
+    var g = ctx.createLinearGradient(0, 0, w, h);
+    g.addColorStop(0, "#0f3d38"); g.addColorStop(1, "#0a1a1f");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = "#14b8a6";
+    ctx.beginPath(); ctx.arc(w / 2, h / 2 - 8, 50, 0, Math.PI * 2); ctx.fill();
+    var initials = name.split(" ").map(function (s) { return s.charAt(0); }).join("").slice(0, 2);
+    ctx.fillStyle = "#062b26"; ctx.font = "bold 40px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(initials, w / 2, h / 2 - 6);
+  }
+
+  function stamp(ctx, w, h) {
+    ctx.fillStyle = "rgba(0,0,0,.55)"; ctx.fillRect(0, h - 22, w, 22);
+    ctx.fillStyle = "#e8f1ef"; ctx.font = "11px sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    ctx.fillText(new Date().toLocaleString("en-US"), 8, h - 11);
+  }
+
+  // ---------- Confirm ----------
+  function updateConfirm() {
+    $("confirmBtn").disabled = !(state.assoc && state.photo);
+    if (state.assoc && !state.photo) setMsg("formMsg", "", "");
+  }
+
+  $("confirmBtn").addEventListener("click", function () {
+    if (!state.assoc || !state.photo) { setMsg("formMsg", "Verify your PIN and capture a photo first.", "err"); return; }
+    var a = ACTIONS[state.action], p = state.assoc, now = new Date();
+    var rows = [["Associate", p.name + " (" + p.id + ")"], ["Time", now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" })]];
+
+    if (state.action === "transfer") {
+      var store = $("xStore").value, role = $("xRole").value;
+      if (STORES.indexOf(store) === -1 || ROLES.indexOf(role) === -1) { setMsg("formMsg", "Select a valid store and role.", "err"); return; }
+      p.role = role;
+      rows.push(["To store", store], ["Role", role]);
+    } else {
+      rows.push(["Location", KIOSK]);
+    }
+    p.status = a.to;
+    rows.push(["Status", STATUS[p.status]]);
+    showDone(a, p, rows);
+  });
+
+  function showDone(a, p, rows) {
+    var photo = state.photo;
+    stopCamera();
+    $("modal").hidden = true;
+    $("dTitle").textContent = a.done;
+    $("dSub").textContent = "Thanks, " + p.name.split(" ")[0] + " — punch recorded and synced (demo).";
+    $("dPhoto").src = photo;
+    var dl = $("dList"); dl.textContent = "";
+    rows.forEach(function (r) {
+      var dt = document.createElement("dt"); dt.textContent = r[0];
+      var dd = document.createElement("dd"); dd.textContent = r[1]; dd.title = r[1];
+      dl.appendChild(dt); dl.appendChild(dd);
+    });
+    resetForm();
+    $("done").hidden = false;
+    var s = RETURN_S;
+    var upd = function () { $("dBack").textContent = "Returning to home in " + s + "s"; };
+    upd(); clearInterval(returnTimer);
+    returnTimer = setInterval(function () { s--; if (s <= 0) closeAll(); else upd(); }, 1000);
+  }
+
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeAll(); });
+  window.addEventListener("pagehide", stopCamera);
+})();
+</script>
+</body>
+</html>
