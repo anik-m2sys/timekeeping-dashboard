@@ -119,6 +119,16 @@
   .vf .ph .cam{width:38px;height:38px;border-radius:50%;background:var(--tealbg);color:var(--teal);display:grid;place-items:center;margin:0 auto 6px}
   .vf .ph b{font-size:11px;display:block}
   .vf .ph span{font-size:9px;color:var(--muted);display:block;margin-top:2px}
+  .vf .guide{position:absolute;left:50%;top:50%;width:84px;height:108px;transform:translate(-50%,-54%);border:2px dashed rgba(45,212,191,.7);border-radius:50%;box-shadow:0 0 0 999px rgba(0,0,0,.28);pointer-events:none}
+  .vf .count{position:absolute;inset:0;display:grid;place-items:center;font-size:44px;font-weight:800;color:#fff;text-shadow:0 2px 12px rgba(0,0,0,.7);pointer-events:none}
+  .vf .flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
+  .vf .flash.go{animation:flash .45s ease-out}
+  @keyframes flash{0%{opacity:.9}100%{opacity:0}}
+  .vf .ph .cam.warn{background:#3a2a10;color:var(--amber)}
+  .vf .okb{position:absolute;right:6px;top:6px;font-size:8px;font-weight:600;background:#14532d;color:#86efac;border-radius:99px;padding:2px 6px}
+  .alt{display:flex;justify-content:center;gap:10px;margin-top:5px;font-size:9px}
+  .alt button{color:var(--teal);text-decoration:underline;text-underline-offset:2px}
+  .alt button:disabled{opacity:.4;cursor:not-allowed}
   .vf .badge{position:absolute;left:6px;top:6px;font-size:8px;background:rgba(0,0,0,.6);border-radius:99px;padding:2px 6px;color:var(--green);display:flex;align-items:center;gap:3px}
   .cap{display:flex;justify-content:center;margin-top:6px}
   .cap .btn{display:flex;align-items:center;gap:5px;font-size:10px;padding:6px 10px}
@@ -237,13 +247,22 @@
         <div class="vf" id="vf">
           <video id="video" playsinline muted hidden></video>
           <img id="shot" alt="Captured authentication photo" hidden>
+          <div class="guide" id="guide" hidden></div>
+          <div class="count" id="count" hidden></div>
+          <div class="flash" id="flash"></div>
           <span class="badge" id="liveBadge" hidden>● Live</span>
+          <span class="okb" id="okBadge" hidden>✓ Captured</span>
           <div class="ph" id="ph">
-            <div class="cam"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></div>
+            <div class="cam" id="phIcon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></div>
             <b id="phT">Camera Viewfinder Ready</b><span id="phS">Please enter your PIN above first</span>
           </div>
         </div>
         <div class="cap"><button class="btn g" id="capBtn" disabled><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span id="capTxt">Capture Webcam Photo</span></button></div>
+        <div class="alt" id="altRow" hidden>
+          <button type="button" id="retryCam">Retry camera</button>
+          <button type="button" id="uploadBtn">Take / upload photo</button>
+        </div>
+        <input type="file" id="fileIn" accept="image/jpeg,image/png,image/webp" capture="user" hidden>
       </div>
 
       <div class="f sec"><label for="note">Authentication Note</label><input class="inp" id="note" maxlength="120" value="Photo authentication verified at terminal kiosk"></div>
@@ -381,6 +400,9 @@
     $("phS").textContent = "Please enter your PIN above first";
     $("capBtn").disabled = true;
     $("capTxt").textContent = "Capture Webcam Photo";
+    $("altRow").hidden = true; $("guide").hidden = true; $("okBadge").hidden = true; $("count").hidden = true;
+    $("phIcon").className = "cam";
+    state.photoSource = null;
     updateConfirm();
   }
 
@@ -475,63 +497,159 @@
   }
 
   // ---------- Camera ----------
+  // Flow: live webcam (getUserMedia) → 3-2-1 countdown → frame grabbed to canvas → JPEG kept in memory only.
+  // If the tile blocks the camera, the associate can take/upload a photo or use a demo photo instead.
+  var CAM_ICON = $("phIcon").innerHTML;
+  var MAX_UPLOAD = 10 * 1024 * 1024; // 10 MB
+  var counting = null;
+
+  function camAllowedByTile() {
+    var pp = document.permissionsPolicy || document.featurePolicy;
+    try { return !pp || !pp.allowsFeature || pp.allowsFeature("camera"); } catch (e) { return true; }
+  }
+
+  function showPh(title, sub, warn) {
+    $("ph").hidden = false;
+    $("phT").textContent = title; $("phS").textContent = sub;
+    $("phIcon").className = "cam" + (warn ? " warn" : "");
+  }
+
   function startCamera() {
-    $("capBtn").disabled = true;
+    stopCamera();
+    $("capBtn").disabled = true; $("altRow").hidden = true;
+    $("okBadge").hidden = true; $("guide").hidden = true;
+    showPh("Starting camera…", "Allow camera access if your browser asks", false);
     var md = navigator.mediaDevices;
-    if (!md || !md.getUserMedia) { cameraFallback(); return; }
+    if (!window.isSecureContext) { cameraFallback("Camera needs a secure (https) page"); return; }
+    if (!md || !md.getUserMedia) { cameraFallback("This browser doesn't support the webcam"); return; }
+    if (!camAllowedByTile()) { cameraFallback("This tile doesn't allow camera access"); return; }
     md.getUserMedia({ video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } }, audio: false })
       .then(function (stream) {
-        if (!state.assoc) { stream.getTracks().forEach(function (t) { t.stop(); }); return; }
+        if (!state.assoc || state.photo) { stream.getTracks().forEach(function (t) { t.stop(); }); return; }
         state.stream = stream;
         var v = $("video");
         v.srcObject = stream;
-        v.hidden = false; $("ph").hidden = true; $("liveBadge").hidden = false;
-        v.play().catch(function () {});
-        $("capBtn").disabled = false;
-        $("capTxt").textContent = "Capture Webcam Photo";
+        v.onloadedmetadata = function () {
+          v.play().catch(function () {});
+          v.hidden = false; $("ph").hidden = true; $("liveBadge").hidden = false; $("guide").hidden = false;
+          $("capBtn").disabled = false;
+          $("capTxt").textContent = "Capture Webcam Photo";
+          $("altRow").hidden = true;
+        };
+        stream.getVideoTracks()[0].addEventListener("ended", function () {
+          if (!state.photo) cameraFallback("Camera disconnected");
+        });
       })
-      .catch(cameraFallback);
+      .catch(function (err) {
+        var n = err && err.name;
+        var why = n === "NotAllowedError" ? "Camera permission was denied"
+                : n === "NotFoundError" || n === "OverconstrainedError" ? "No webcam was found"
+                : n === "NotReadableError" ? "Camera is in use by another app"
+                : n === "SecurityError" ? "This tile doesn't allow camera access"
+                : "Camera couldn't start";
+        cameraFallback(why);
+      });
   }
 
-  function cameraFallback() {
+  function cameraFallback(reason) {
     if (!state.assoc) return;
-    $("ph").hidden = false;
-    $("phT").textContent = "Camera not available";
-    $("phS").textContent = "Demo mode: a placeholder photo will be captured";
+    stopCamera();
+    $("video").hidden = true; $("liveBadge").hidden = true; $("guide").hidden = true;
+    showPh(reason || "Camera not available", "Retry, take or upload a photo, or use a demo photo", true);
+    $("altRow").hidden = false;
     $("capBtn").disabled = false;
-    $("capTxt").textContent = "Capture Demo Photo";
+    $("capTxt").textContent = "Use Demo Photo";
   }
 
   function stopCamera() {
+    if (counting) { clearInterval(counting); counting = null; $("count").hidden = true; }
     if (state.stream) { state.stream.getTracks().forEach(function (t) { t.stop(); }); state.stream = null; }
-    var v = $("video"); v.srcObject = null;
+    var v = $("video"); v.onloadedmetadata = null; v.srcObject = null;
+  }
+
+  function retake() {
+    state.photo = null;
+    $("shot").hidden = true; $("shot").removeAttribute("src"); $("okBadge").hidden = true;
+    updateConfirm();
+    startCamera();
   }
 
   $("capBtn").addEventListener("click", function () {
-    if (!state.assoc) return;
-    if (state.photo) { // Retake
-      state.photo = null;
-      $("shot").hidden = true; $("shot").removeAttribute("src");
-      startCamera(); updateConfirm(); return;
-    }
-    var c = $("canvas"), ctx = c.getContext("2d"), v = $("video");
-    if (state.stream && v.videoWidth) {
-      var w = v.videoWidth, h = v.videoHeight, tw = c.width, th = c.height;
-      var scale = Math.max(tw / w, th / h), sw = tw / scale, sh = th / scale;
-      ctx.save(); ctx.translate(tw, 0); ctx.scale(-1, 1);
-      ctx.drawImage(v, (w - sw) / 2, (h - sh) / 2, sw, sh, 0, 0, tw, th);
-      ctx.restore();
-    } else {
-      drawPlaceholder(ctx, c.width, c.height, state.assoc.name);
-    }
+    if (!state.assoc || counting) return;
+    if (state.photo) { retake(); return; }
+    if (state.stream && $("video").videoWidth) { countdown(); return; }
+    useDemoPhoto();
+  });
+
+  function countdown() {
+    var n = 3;
+    $("capBtn").disabled = true;
+    $("count").textContent = n; $("count").hidden = false;
+    counting = setInterval(function () {
+      n--;
+      if (n > 0) { $("count").textContent = n; return; }
+      clearInterval(counting); counting = null; $("count").hidden = true;
+      grabFrame();
+    }, 700);
+  }
+
+  function grabFrame() {
+    var v = $("video");
+    if (!state.stream || !v.videoWidth) { cameraFallback("Camera stopped"); return; }
+    var c = $("canvas"), ctx = c.getContext("2d");
+    var w = v.videoWidth, h = v.videoHeight, tw = c.width, th = c.height;
+    var sc = Math.max(tw / w, th / h), sw = tw / sc, sh = th / sc;
+    ctx.save(); ctx.translate(tw, 0); ctx.scale(-1, 1); // mirror to match the preview
+    ctx.drawImage(v, (w - sw) / 2, (h - sh) / 2, sw, sh, 0, 0, tw, th);
+    ctx.restore();
+    finishCapture(c, ctx, "Webcam");
+  }
+
+  function useDemoPhoto() {
+    var c = $("canvas"), ctx = c.getContext("2d");
+    drawPlaceholder(ctx, c.width, c.height, state.assoc.name);
+    finishCapture(c, ctx, "Demo");
+  }
+
+  function finishCapture(c, ctx, source) {
     stamp(ctx, c.width, c.height);
     state.photo = c.toDataURL("image/jpeg", 0.82);
+    state.photoSource = source;
     ctx.clearRect(0, 0, c.width, c.height);
     stopCamera();
-    $("video").hidden = true; $("liveBadge").hidden = true; $("ph").hidden = true;
-    $("shot").src = state.photo; $("shot").hidden = false;
+    var f = $("flash"); f.classList.remove("go"); void f.offsetWidth; f.classList.add("go");
+    $("video").hidden = true; $("liveBadge").hidden = true; $("guide").hidden = true; $("ph").hidden = true;
+    $("altRow").hidden = true;
+    $("shot").src = state.photo; $("shot").hidden = false; $("okBadge").hidden = false;
+    $("capBtn").disabled = false;
     $("capTxt").textContent = "Retake Photo";
     updateConfirm();
+  }
+
+  $("retryCam").addEventListener("click", startCamera);
+  $("uploadBtn").addEventListener("click", function () { if (state.assoc) { $("fileIn").value = ""; $("fileIn").click(); } });
+
+  // Photo taken with the device camera app or chosen from files. Only JPEG/PNG/WebP under 10 MB are accepted,
+  // and the image is redrawn onto a canvas so only clean pixels are kept (no metadata such as GPS).
+  $("fileIn").addEventListener("change", function (e) {
+    var file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file || !state.assoc) return;
+    if (["image/jpeg", "image/png", "image/webp"].indexOf(file.type) === -1) { setMsg("formMsg", "Please choose a JPEG, PNG or WebP photo.", "err"); return; }
+    if (file.size > MAX_UPLOAD) { setMsg("formMsg", "That photo is larger than 10 MB.", "err"); return; }
+    var url = URL.createObjectURL(file), img = new Image();
+    img.onload = function () {
+      URL.revokeObjectURL(url);
+      if (!state.assoc) return;
+      var c = $("canvas"), ctx = c.getContext("2d"), tw = c.width, th = c.height;
+      var sc = Math.max(tw / img.naturalWidth, th / img.naturalHeight);
+      var sw = tw / sc, sh = th / sc;
+      ctx.drawImage(img, (img.naturalWidth - sw) / 2, (img.naturalHeight - sh) / 2, sw, sh, 0, 0, tw, th);
+      setMsg("formMsg", "", "");
+      finishCapture(c, ctx, "Photo");
+    };
+    img.onerror = function () { URL.revokeObjectURL(url); setMsg("formMsg", "That file couldn't be read as a photo.", "err"); };
+    img.src = url;
   });
 
   function drawPlaceholder(ctx, w, h, name) {
@@ -571,7 +689,7 @@
       rows.push(["Location", KIOSK]);
     }
     p.status = a.to;
-    rows.push(["Status", STATUS[p.status]]);
+    rows.push(["Status", STATUS[p.status]], ["Photo", (state.photoSource || "Webcam") + " · verified"]);
     showDone(a, p, rows);
   });
 
