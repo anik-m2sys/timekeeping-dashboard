@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=320, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Timekeeping Terminal</title>
 <style>
   :root{
@@ -14,20 +14,20 @@
   }
   *{box-sizing:border-box;margin:0;padding:0}
   [hidden]{display:none!important}
-  html,body{width:320px;height:489px;background:var(--bg);overflow:hidden}
+  html,body{width:100%;height:100%;background:var(--bg);overflow:hidden}
   body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;color:var(--text);-webkit-font-smoothing:antialiased}
   button,input,select{font:inherit;color:inherit}
   button{cursor:pointer;border:0;background:none}
   svg{display:block}
   .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
 
-  #app{position:relative;width:320px;height:489px;display:flex;flex-direction:column;background:var(--bg)}
+  #app{position:absolute;left:50%;top:0;width:320px;height:458px;transform-origin:top center;transform:translateX(-50%);display:flex;flex-direction:column;justify-content:center;background:var(--bg)}
 
   /* Header */
   .hdr{display:flex;align-items:center;gap:8px;padding:9px 10px;margin:6px 6px 0;background:var(--panel);border:1px solid var(--line);border-radius:10px}
   .ico{width:30px;height:30px;border-radius:8px;background:var(--tealbg);color:var(--teal);display:grid;place-items:center;flex:none}
   .hdr-t{flex:1;min-width:0}
-  .hdr-t b{display:block;font-size:12px;font-weight:600}
+  .hdr-t b{display:block;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .hdr-t span{display:block;font-size:9.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .hdr-t span em{font-style:normal;color:var(--text);font-weight:600}
   .clk{text-align:right;flex:none}
@@ -35,13 +35,13 @@
   .clk .d{font-size:8.5px;color:var(--muted);margin-top:1px}
 
   /* Home */
-  .main{flex:1;display:flex;flex-direction:column;margin:6px;padding:10px;background:var(--panel);border:1px solid var(--line);border-radius:12px;min-height:0}
+  .main{flex:none;display:flex;flex-direction:column;margin:6px;padding:10px;background:var(--panel);border:1px solid var(--line);border-radius:12px;min-height:0}
   .intro{text-align:center;margin-bottom:10px}
   .intro .ico{margin:0 auto 6px;width:28px;height:28px}
   .intro h1{font-size:14.5px;font-weight:700}
   .intro p{font-size:9.5px;color:var(--muted);margin-top:3px;line-height:1.35}
-  .big{display:grid;grid-template-columns:1fr 1fr;gap:7px;flex:1;min-height:0}
-  .card{position:relative;text-align:left;border-radius:11px;padding:10px;display:flex;flex-direction:column;border:1px solid var(--line2);transition:transform .12s,filter .12s}
+  .big{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+  .card{position:relative;text-align:left;border-radius:11px;padding:10px;height:132px;display:flex;flex-direction:column;border:1px solid var(--line2);transition:transform .12s,filter .12s}
   .card:hover{filter:brightness(1.1)}
   .card:active{transform:scale(.97)}
   .card:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
@@ -51,7 +51,7 @@
   .card h2{font-size:14px;font-weight:700;display:flex;align-items:center;gap:5px;flex-wrap:wrap}
   .tag{font-size:8px;font-weight:600;padding:2px 6px;border-radius:99px;background:rgba(255,255,255,.18);white-space:nowrap}
   .card p{font-size:9.5px;line-height:1.35;color:rgba(255,255,255,.82);margin-top:4px;flex:1}
-  .card .go{font-size:9.5px;margin-top:6px;display:flex;align-items:center;gap:3px;opacity:.9}
+  .card .go{font-size:9.5px;margin-top:auto;padding-top:6px;display:flex;align-items:center;gap:3px;opacity:.9}
   .small{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:7px}
   .sc{position:relative;text-align:left;border-radius:10px;padding:8px;background:#101b1a;border:1px solid #1f3b34;display:flex;flex-direction:column;min-height:112px;transition:filter .12s,transform .12s}
   .sc:hover{filter:brightness(1.15)}
@@ -70,7 +70,7 @@
   .sc.brk .go{color:var(--amber)}
   .sc.xfr .go{color:var(--teal)}
 
-  .ftr{display:flex;justify-content:space-between;align-items:center;padding:0 12px 8px;font-size:8.5px;color:var(--muted)}
+  .ftr{flex:none;margin-top:2px;display:flex;justify-content:space-between;align-items:center;padding:0 12px 8px;font-size:8.5px;color:var(--muted)}
   .live{display:flex;align-items:center;gap:4px}
   .live i{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green)}
 
@@ -595,6 +595,15 @@
     upd(); clearInterval(returnTimer);
     returnTimer = setInterval(function () { s--; if (s <= 0) closeAll(); else upd(); }, 1000);
   }
+
+  // Scale the fixed 320x489 design evenly to fit the tile (never stretched or distorted).
+  function fit() {
+    var app = $("app"), W = 320, H = 458;
+    var scale = Math.min(window.innerWidth / W, window.innerHeight / H);
+    app.style.top = Math.max(0, (window.innerHeight - H * scale) / 2) + "px";
+    app.style.transform = "translateX(-50%) scale(" + scale + ")";
+  }
+  fit(); window.addEventListener("resize", fit);
 
   document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeAll(); });
   window.addEventListener("pagehide", stopCamera);
